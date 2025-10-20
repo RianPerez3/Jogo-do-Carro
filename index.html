@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo do Carro</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #564965;
+            background-image: url("https://cdn.pixabay.com/photo/2018/09/23/23/47/highway-3698782_640.jpg");
+            background-size: cover;
+            font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background-color: #222;
+        }
+        #menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #fff;
+            font-size: 24px;
+        }
+        #menu button {
+            padding: 10px 20px;
+            font-size: 20px;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            background-color: #00bfff;
+            color: white;
+            border-radius: 5px;
+        }
+        #menu button:hover {
+            background-color: #0099cc;
+        }
+        #melhorPontuacaoTexto {
+            margin-top: 10px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="jogoCanvas"></canvas>
+    <div id="menu">
+        <h1>Jogo do Carro</h1>
+        <p>Escolha a dificuldade:</p>
+        <button onclick="iniciarJogo('facil')">Fácil</button>
+        <button onclick="iniciarJogo('medio')">Médio</button>
+        <button onclick="iniciarJogo('dificil')">Difícil</button>
+        <p id="melhorPontuacaoTexto"></p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("jogoCanvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = 480;
+        canvas.height = 600;
+
+        let jogoAtivo = false;
+        let pontuacao = 0;
+        let melhorPontuacao = localStorage.getItem("melhorPontuacao") || 0;
+        let carro, obstaculos, teclado, animacao;
+        let velocidadeObstaculos, frequenciaObstaculos, ultimaGeracao = 0, espacamentoMinimo = 150;
+        let dificuldade = 'medio';
+        let carroVelocidade = 5;
+
+        const somColisao = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+        function tocarSomPonto() {
+            const somPonto = new Audio("https://actions.google.com/sounds/v1/cartoon/pop.ogg");
+            somPonto.volume = 0.6;
+            somPonto.play();
+        }
+
+        const imgCarro = new Image();
+        imgCarro.src = "https://www.vhv.rs/dpng/f/436-4365173_race-car-png.png";
+
+        const imgObstaculo = new Image();
+        imgObstaculo.src = "https://static.vecteezy.com/system/resources/previews/047/600/817/original/rusty-barbed-wire-png.png";
+
+        let linhasEstrada = [];
+        for (let i = 0; i < 10; i++) linhasEstrada.push({ y: i * 60 });
+
+        function reiniciarJogo() {
+            jogoAtivo = false;
+            pontuacao = 0;
+            obstaculos = [];
+            teclado = {};
+            cancelAnimationFrame(animacao);
+            document.getElementById("menu").style.display = "block";
+            document.getElementById("melhorPontuacaoTexto").textContent = "Melhor Pontuação: " + melhorPontuacao;
+        }
+
+        function iniciarJogo(nivel) {
+            dificuldade = nivel;
+            jogoAtivo = true;
+            document.getElementById("menu").style.display = "none";
+
+            if (nivel === 'facil') {
+                velocidadeObstaculos = 4;
+                frequenciaObstaculos = 90;
+                carroVelocidade = 6;
+            } else if (nivel === 'medio') {
+                velocidadeObstaculos = 6;
+                frequenciaObstaculos = 70;
+                carroVelocidade = 5;
+            } else {
+                velocidadeObstaculos = 8;
+                frequenciaObstaculos = 50;
+                carroVelocidade = 4;
+            }
+
+            carro = {
+                x: canvas.width / 2 - 30,
+                y: canvas.height - 140,
+                largura: 60,
+                altura: 120,
+                velocidade: carroVelocidade
+            };
+
+            obstaculos = [];
+            teclado = {};
+            ultimaGeracao = 0;
+            atualizarJogo();
+        }
+
+        function desenharFundo() {
+            ctx.fillStyle = "#4444";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = "#ffff";
+            linhasEstrada.forEach(linha => {
+                ctx.fillRect(canvas.width / 2 - 5, linha.y, 10, 40);
+                linha.y += velocidadeObstaculos / 1.5;
+                if (linha.y > canvas.height) linha.y = -40;
+            });
+        }
+
+        function desenharCarro() {
+            if (imgCarro.complete) {
+                ctx.drawImage(imgCarro, carro.x, carro.y, carro.largura, carro.altura);
+            } else {
+                ctx.fillStyle = "#00ff";
+                ctx.fillRect(carro.x, carro.y, carro.largura, carro.altura);
+            }
+        }
+
+        function moverCarro() {
+            if (teclado["ArrowLeft"] && carro.x > 0) carro.x -= carro.velocidade;
+            if (teclado["ArrowRight"] && carro.x < canvas.width - carro.largura) carro.x += carro.velocidade;
+        }
+
+        function gerarObstaculo() {
+    if (obstaculos.length > 0) {
+        const ultimo = obstaculos[obstaculos.length - 1];
+        if (ultimo.y < espacamentoMinimo) return;
+    }
+
+          let larguraObstaculo = 100;
+           let alturaObstaculo = 40;
+          let xPosicaoObstaculo = Math.random() * (canvas.width - larguraObstaculo);
+           obstaculos.push({ x: xPosicaoObstaculo, y: -alturaObstaculo, largura: larguraObstaculo, altura: alturaObstaculo });
+        }
+
+
+        function desenharObstaculos() {
+          obstaculos.forEach(obstaculo => {
+              if (imgObstaculo.complete) {
+              ctx.drawImage(imgObstaculo, obstaculo.x, obstaculo.y, obstaculo.largura, obstaculo.altura);
+              } else {
+                ctx.fillStyle = "#161616";
+            ctx.fillRect(obstaculo.x, obstaculo.y, obstaculo.largura, obstaculo.altura);
+        }
+        });
+}
+
+
+        function moverObstaculos() {
+            obstaculos.forEach((obstaculo, index) => {
+                obstaculo.y += velocidadeObstaculos;
+                if (obstaculo.y > canvas.height) {
+                    obstaculos.splice(index, 1);
+                    pontuacao += 10;
+                    tocarSomPonto();
+                }
+            });
+        }
+
+        function detectarColisao() {
+            for (let obstaculo of obstaculos) {
+                if (
+                    carro.x < obstaculo.x + obstaculo.largura &&
+                    carro.x + carro.largura > obstaculo.x &&
+                    carro.y < obstaculo.y + obstaculo.altura &&
+                    carro.y + carro.altura > obstaculo.y
+                ) {
+                    somColisao.play();
+                    alert("Você perdeu. Sua pontuação final foi de: " + pontuacao);
+                    if (pontuacao > melhorPontuacao) {
+                        melhorPontuacao = pontuacao;
+                        localStorage.setItem("melhorPontuacao", melhorPontuacao);
+                    }
+                    reiniciarJogo();
+                }
+            }
+        }
+
+        function atualizarPontuacao() {
+            ctx.fillStyle = "#fff";
+            ctx.font = "22px Arial";
+            ctx.fillText("Sua Pontuação: " + pontuacao, 10, 30);
+            ctx.fillText("Melhor Pontuação: " + melhorPontuacao, 10, 60);
+        }
+
+        let contadorFrames = 0;
+        function atualizarJogo() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            desenharFundo();
+            desenharCarro();
+            moverCarro();
+            desenharObstaculos();
+            moverObstaculos();
+            detectarColisao();
+            atualizarPontuacao();
+
+            contadorFrames++;
+            if (contadorFrames % frequenciaObstaculos === 0) gerarObstaculo();
+
+            if (jogoAtivo) animacao = requestAnimationFrame(atualizarJogo);
+        }
+
+        window.addEventListener("keydown", (evento) => teclado[evento.key] = true);
+        window.addEventListener("keyup", (evento) => teclado[evento.key] = false);
+
+        reiniciarJogo();
+    </script>
+</body>
+</html>
